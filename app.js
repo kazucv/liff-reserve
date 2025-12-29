@@ -1,26 +1,52 @@
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbx2e8Xd8kAQ--kWErdGY7CBtsJ8gDSD87SEQbtDHrfM5HL0xxGhfpzZ8hQ5Qjj8bRg/exec";
 
-async function main() {
-  const statusEl = document.getElementById("status");
-  if (statusEl) statusEl.textContent = "fetching GAS...";
+const LIFF_ID = "2008793696-IEhzXwEH";
 
-  // ここは「すでにLIFF init & login済み」前提
-  const profile = await liff.getProfile();
-  const url = `${GAS_URL}?userId=${encodeURIComponent(
-    profile.userId
-  )}&t=${Date.now()}`; // t はキャッシュ避け
+const statusEl = document.getElementById("status");
+const log = (msg) => {
+  console.log(msg);
+  if (statusEl) statusEl.textContent = msg;
+};
 
-  fetch(url, { cache: "no-store" })
-    .then((r) => r.json())
-    .then((data) => {
-      console.log("GAS:", data);
-      if (statusEl) statusEl.textContent = `GAS OK: ${JSON.stringify(data)}`;
-    })
-    .catch((err) => {
-      console.error("fetch error:", err);
-      if (statusEl) statusEl.textContent = `GAS NG: ${err?.message || err}`;
+async function run() {
+  try {
+    log("1) init LIFF...");
+    await liff.init({ liffId: LIFF_ID });
+
+    log(`2) isLoggedIn: ${liff.isLoggedIn()}`);
+    if (!liff.isLoggedIn()) {
+      log("2.5) redirecting to login...");
+      liff.login();
+      return;
+    }
+
+    log("3) getting profile...");
+    const profile = await liff.getProfile();
+    log(`3.5) got profile: ${profile.displayName}`);
+
+    const url = `${GAS_URL}?userId=${encodeURIComponent(
+      profile.userId
+    )}&t=${Date.now()}`;
+
+    log("4) fetching GAS...");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000); // 8秒でタイムアウト
+
+    const res = await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
     });
+    clearTimeout(timer);
+
+    log(`4.5) response: ${res.status}`);
+    const data = await res.json();
+
+    log(`5) GAS OK: ${JSON.stringify(data)}`);
+  } catch (e) {
+    log(`NG: ${e?.name || "Error"} / ${e?.message || e}`);
+    console.error(e);
+  }
 }
 
-main();
+run();
