@@ -75,32 +75,6 @@ async function run() {
     log(`5) status: ${status}`);
     log(`6) data: ${JSON.stringify(data)}`);
 
-    // 7) 試しに1件予約（あとでボタンにする）
-    const first = slots[0];
-    if (!first) {
-      log("枠がない…");
-      return;
-    }
-
-    const payload2 = {
-      action: "createReservation",
-      userId: profile.userId,
-      slotId: first.slotId, // ← getSlotsで返ってきたslotId
-      name: "テスト太郎", // ← まず固定でOK
-      tel: "09012345678", // ← まず固定でOK
-      note: "LIFFテスト予約",
-    };
-
-    log("7) POST createReservation to GAS...");
-    const r2 = await postJson(GAS_URL, payload2, 10000);
-    log(`8) reserve response: ${r2.status}`);
-
-    if (!r2.data?.ok) {
-      log(`予約NG: ${JSON.stringify(r2.data)}`);
-      return;
-    }
-
-    log(`9) 予約OK: ${r2.data.reservationId}`);
     // とりあえず slots を出す
     if (data?.ok && Array.isArray(data.slots)) {
       const ul = document.createElement("ul");
@@ -115,6 +89,33 @@ async function run() {
     log(`ERROR: ${e?.name || "Error"} / ${e?.message || e}`);
     console.error(e);
   }
+
+  // 7) 試しに1件予約（あとでボタンにする）
+  const first = slots[0];
+  if (!first) {
+    log("枠がない…");
+    return;
+  }
+
+  const payload2 = {
+    action: "createReservation",
+    userId: profile.userId,
+    slotId: first.slotId, // ← getSlotsで返ってきたslotId
+    name: "テスト太郎", // ← まず固定でOK
+    tel: "09012345678", // ← まず固定でOK
+    note: "LIFFテスト予約",
+  };
+
+  log("7) POST createReservation to GAS...");
+  const r2 = await postJson(GAS_URL, payload2, 10000);
+  log(`8) reserve response: ${r2.status}`);
+
+  if (!r2.data?.ok) {
+    log(`予約NG: ${JSON.stringify(r2.data)}`);
+    return;
+  }
+
+  log(`9) 予約OK: ${r2.data.reservationId}`);
 }
 
 run();
