@@ -10,6 +10,11 @@ const log = (msg) => {
 };
 
 async function run() {
+  if (!window.liff) {
+    document.getElementById("status").textContent = "LIFF SDKが読み込めてない…";
+    throw new Error("LIFF SDK not loaded");
+  }
+
   try {
     log("1) init LIFF...");
     await liff.init({ liffId: LIFF_ID });
