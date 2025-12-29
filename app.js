@@ -10,12 +10,9 @@ const log = (msg) => {
 };
 
 async function run() {
-  if (!window.liff) {
-    document.getElementById("status").textContent = "LIFF SDKが読み込めてない…";
-    throw new Error("LIFF SDK not loaded");
-  }
-
   try {
+    if (!window.liff) throw new Error("LIFF SDK not loaded");
+
     log("1) init LIFF...");
     await liff.init({ liffId: LIFF_ID });
 
@@ -36,7 +33,7 @@ async function run() {
 
     log("4) fetching GAS...");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000); // 8秒でタイムアウト
+    const timer = setTimeout(() => controller.abort(), 8000);
 
     const res = await fetch(url, {
       cache: "no-store",
@@ -45,7 +42,17 @@ async function run() {
     clearTimeout(timer);
 
     log(`4.5) response: ${res.status}`);
-    const data = await res.json();
+
+    const text = await res.text(); // まずは生で受け取る
+    log(`4.8) body: ${text.slice(0, 120)}...`);
+
+    // JSONっぽい時だけパース
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
 
     log(`5) GAS OK: ${JSON.stringify(data)}`);
   } catch (e) {
