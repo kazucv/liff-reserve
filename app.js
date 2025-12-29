@@ -20,7 +20,6 @@ async function postJson(url, payload, timeoutMs = 10000) {
   try {
     const res = await fetch(url, {
       method: "POST",
-      // GASは text/plain が一番事故りにくい
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(payload),
       cache: "no-store",
@@ -62,11 +61,11 @@ async function run() {
     const profile = await liff.getProfile();
     log(`3.5) got profile: ${profile.displayName}`);
 
-    // ✅ POSTで apiFlow へ
+    // 4) getSlots
     const payload = {
       action: "getSlots",
       userId: profile.userId,
-      ym: "202601", // ひとまず固定
+      ym: "202601",
     };
 
     log("4) POST getSlots...");
@@ -75,47 +74,49 @@ async function run() {
     log(`5) status: ${status}`);
     log(`6) data: ${JSON.stringify(data)}`);
 
-    // とりあえず slots を出す
-    if (data?.ok && Array.isArray(data.slots)) {
+    const slots = data?.ok && Array.isArray(data.slots) ? data.slots : [];
+
+    // slots表示
+    if (slots.length > 0) {
       const ul = document.createElement("ul");
-      data.slots.forEach((s) => {
+      slots.forEach((s) => {
         const li = document.createElement("li");
         li.textContent = `${s.start} 〜 ${s.end}`;
         ul.appendChild(li);
       });
       document.body.appendChild(ul);
     }
+
+    // 7) 試しに1件予約（あとでボタンにする）
+    const first = slots[0];
+    if (!first) {
+      log("枠がない…");
+      return;
+    }
+
+    const payload2 = {
+      action: "createReservation",
+      userId: profile.userId,
+      slotId: first.slotId,
+      name: "テスト太郎",
+      tel: "09012345678",
+      note: "LIFFテスト予約",
+    };
+
+    log("7) POST createReservation...");
+    const r2 = await postJson(GAS_URL, payload2, 10000);
+    log(`8) reserve response: ${r2.status}`);
+
+    if (!r2.data?.ok) {
+      log(`予約NG: ${JSON.stringify(r2.data)}`);
+      return;
+    }
+
+    log(`9) 予約OK: ${r2.data.reservationId}`);
   } catch (e) {
     log(`ERROR: ${e?.name || "Error"} / ${e?.message || e}`);
     console.error(e);
   }
-
-  // 7) 試しに1件予約（あとでボタンにする）
-  const first = slots[0];
-  if (!first) {
-    log("枠がない…");
-    return;
-  }
-
-  const payload2 = {
-    action: "createReservation",
-    userId: profile.userId,
-    slotId: first.slotId, // ← getSlotsで返ってきたslotId
-    name: "テスト太郎", // ← まず固定でOK
-    tel: "09012345678", // ← まず固定でOK
-    note: "LIFFテスト予約",
-  };
-
-  log("7) POST createReservation to GAS...");
-  const r2 = await postJson(GAS_URL, payload2, 10000);
-  log(`8) reserve response: ${r2.status}`);
-
-  if (!r2.data?.ok) {
-    log(`予約NG: ${JSON.stringify(r2.data)}`);
-    return;
-  }
-
-  log(`9) 予約OK: ${r2.data.reservationId}`);
 }
 
 run();
