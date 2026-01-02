@@ -55,12 +55,35 @@ const log = (msg) => {
   if (statusEl) statusEl.textContent = msg;
 };
 
-function showView(key) {
-  if (viewCalendar)
-    viewCalendar.style.display = key === "calendar" ? "" : "none";
-  if (viewSlots) viewSlots.style.display = key === "slots" ? "" : "none";
-  if (viewForm) viewForm.style.display = key === "form" ? "" : "none";
+function showView(name) {
+  viewCalendar.classList.toggle("hidden", name !== "calendar");
+  viewSlots.classList.toggle("hidden", name !== "slots");
 }
+
+async function onPickDate(dateStr) {
+  // dateStr: "2026-01-05"
+  log(`選択: ${dateStr} → 空き時間を表示するよ`);
+
+  // ✅ ここで「その月の枠を取得」して（既に取得済みならフィルタだけでもOK）
+  // いまは window.allSlots がある前提で、日付フィルタして描画
+  renderSlotsByDate(dateStr);
+
+  // ✅ 次画面へ
+  showView("slots");
+}
+
+// flatpickr
+flatpickr("#date", {
+  locale: "ja",
+  inline: true,
+  dateFormat: "Y-m-d",
+  defaultDate: "2026-01-05", // まずは固定でもOK（あとで今日にする）
+  minDate: "today",
+  onChange: (selectedDates, dateStr) => {
+    // dateStr が "YYYY-MM-DD"
+    onPickDate(dateStr);
+  },
+});
 
 function pad2(n) {
   return String(n).padStart(2, "0");
