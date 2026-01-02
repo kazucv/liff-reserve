@@ -1,39 +1,222 @@
 <!DOCTYPE html>
 <html lang="ja">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="robots" content="noindex, nofollow" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>LIFF Reserve</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
-    <!-- LIFF -->
-    <script
-      defer
-      src="https://static.line-scdn.net/liff/edge/2/sdk.js"
-    ></script>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
+        margin: 24px;
+      }
+      h1 {
+        font-family: Georgia, serif;
+        font-size: 56px;
+        margin: 0 0 24px;
+      }
+      #status {
+        margin: 12px 0 18px;
+        white-space: pre-wrap;
+      }
+      .hidden {
+        display: none;
+      }
 
-    <!-- flatpickr (inline calendar) -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
-    />
-    <script defer src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 10px 0 18px;
+      }
+      .back {
+        border: 0;
+        background: #eee;
+        padding: 10px 12px;
+        border-radius: 10px;
+      }
+
+      /* ===== Calendar (JSが #calendar に描画する前提) ===== */
+      #calendar .cal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 14px 0 10px;
+      }
+      #calendar .cal-nav {
+        border: 0;
+        background: #eee;
+        padding: 10px 12px;
+        border-radius: 10px;
+      }
+      #calendar .cal-title {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      #calendar .cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+      }
+      #calendar .dow {
+        font-size: 12px;
+        opacity: 0.6;
+        text-align: center;
+        padding: 4px 0;
+      }
+      #calendar .day {
+        border: 0;
+        padding: 14px 0;
+        border-radius: 14px;
+        background: #f3f3f3;
+        text-align: center;
+        font-weight: 600;
+      }
+      #calendar .day:disabled {
+        opacity: 0.35;
+      }
+      #calendar .day.is-today {
+        outline: 2px solid #000;
+        background: #fff;
+      }
+      #calendar .day.is-selected {
+        background: #dbeafe;
+      }
+
+      /* ===== Slots ===== */
+      .section-title {
+        font-size: 42px;
+        margin: 6px 0 14px;
+      }
+      .group {
+        margin: 14px 0 18px;
+      }
+      .group h3 {
+        margin: 0 0 8px;
+        opacity: 0.6;
+        font-weight: 700;
+      }
+      .slot-btn {
+        width: 100%;
+        border: 0;
+        padding: 18px 16px;
+        border-radius: 18px;
+        background: #eee;
+        margin: 10px 0;
+        text-align: left;
+        font-size: 18px;
+      }
+
+      /* ===== Form ===== */
+      .card {
+        background: #f3f3f3;
+        padding: 14px 16px;
+        border-radius: 18px;
+        margin: 10px 0 18px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      }
+      .row:last-child {
+        border-bottom: 0;
+      }
+      .label {
+        opacity: 0.65;
+      }
+      input,
+      textarea {
+        width: 100%;
+        border: 0;
+        background: #f3f3f3;
+        border-radius: 18px;
+        padding: 16px;
+        font-size: 16px;
+        outline: none;
+        margin: 10px 0;
+      }
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+      .primary {
+        width: 100%;
+        border: 0;
+        padding: 18px 16px;
+        border-radius: 18px;
+        background: #e5e5e5;
+        font-size: 18px;
+      }
+      .hint {
+        opacity: 0.6;
+        font-size: 13px;
+        margin-top: 10px;
+      }
+    </style>
   </head>
 
   <body>
     <h1>LIFF Reserve</h1>
 
-    <p id="status">Loading...</p>
+    <div id="status">loading...</div>
 
-    <div id="calendarWrap">
-      <label for="date">日付を選択</label><br />
-      <input id="date" type="text" placeholder="YYYY-MM-DD" />
-      <!-- ↑ flatpickr を当てるので type="text" 推奨 -->
-    </div>
+    <!-- View: Calendar -->
+    <section id="viewCalendar">
+      <div class="section-title">日付選択</div>
 
-    <p id="slotCount"></p>
-    <div id="slots"></div>
+      <!-- ✅ ここにJSが月カレンダーを描画する -->
+      <div id="calendar"></div>
+    </section>
 
-    <script defer src="./app.js"></script>
+    <!-- View: Slots -->
+    <section id="viewSlots" class="hidden">
+      <div class="topbar">
+        <button id="backToCalendar" class="back">← 日付選択</button>
+      </div>
+
+      <div class="section-title">空き時間</div>
+      <div id="slotCount"></div>
+
+      <div class="group">
+        <h3>午前</h3>
+        <div id="slotsAM"></div>
+      </div>
+
+      <div class="group">
+        <h3>午後</h3>
+        <div id="slotsPM"></div>
+      </div>
+    </section>
+
+    <!-- View: Form -->
+    <section id="viewForm" class="hidden">
+      <div class="topbar">
+        <button id="backToSlots" class="back">← 空き時間</button>
+      </div>
+
+      <div class="section-title">入力</div>
+
+      <div class="card" id="summary"></div>
+
+      <div class="label">お客様情報</div>
+      <input id="name" placeholder="お名前" autocomplete="name" />
+      <input
+        id="tel"
+        placeholder="電話番号"
+        inputmode="numeric"
+        autocomplete="tel"
+      />
+
+      <div class="label" style="margin-top: 14px">メモ</div>
+      <textarea id="note" placeholder="備考（任意）"></textarea>
+
+      <button id="confirmBtn" class="primary">確認へ（仮：予約実行）</button>
+      <div class="hint">お名前と電話番号は必須です</div>
+    </section>
+
+    <script src="./app.js"></script>
   </body>
 </html>
