@@ -8,7 +8,7 @@
     <!-- LIFF -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
-    <!-- flatpickr -->
+    <!-- flatpickr (CDN) -->
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
@@ -22,7 +22,7 @@
       h1 {
         font-family: Georgia, serif;
         font-size: 56px;
-        margin: 0 0 24px;
+        margin: 0 0 18px;
       }
       #status {
         margin: 12px 0 18px;
@@ -50,6 +50,20 @@
         margin: 6px 0 14px;
       }
 
+      /* flatpickr */
+      #date {
+        font-size: 18px;
+        width: 100%;
+        border: 0;
+        background: #f3f3f3;
+        border-radius: 18px;
+        padding: 16px;
+        outline: none;
+      }
+      #calendar {
+        margin-top: 12px;
+      }
+
       /* slots */
       .group {
         margin: 14px 0 18px;
@@ -68,6 +82,7 @@
         margin: 10px 0;
         text-align: left;
         font-size: 18px;
+        color: #0b5bd3;
       }
 
       /* form */
@@ -102,6 +117,7 @@
         border-radius: 18px;
         background: #e5e5e5;
         font-size: 18px;
+        color: #0b5bd3;
       }
       .hint {
         opacity: 0.6;
@@ -109,15 +125,15 @@
         margin-top: 10px;
       }
 
-      /* ✅ カレンダーは常時表示したいので input は隠す */
-      #date {
-        display: none;
-      }
-
-      /* flatpickr の見た目微調整（必要なら） */
-      .flatpickr-calendar {
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      /* done */
+      .done-box {
+        background: #f3f3f3;
+        padding: 18px 16px;
         border-radius: 18px;
+        margin: 10px 0 18px;
+      }
+      .sub {
+        opacity: 0.7;
       }
     </style>
   </head>
@@ -130,8 +146,7 @@
     <!-- View: Calendar -->
     <section id="viewCalendar">
       <div class="section-title">日付選択</div>
-
-      <input id="date" />
+      <input id="date" placeholder="日付を選択" />
       <div id="calendar"></div>
     </section>
 
@@ -142,7 +157,7 @@
       </div>
 
       <div class="section-title">空き時間</div>
-      <div id="slotCount"></div>
+      <div id="slotCount" class="sub"></div>
 
       <div class="group">
         <h3>午前</h3>
@@ -181,10 +196,18 @@
       <div class="hint">お名前と電話番号は必須です</div>
     </section>
 
-    <!-- flatpickr JS（app.js より先） -->
+    <!-- View: Done -->
+    <section id="viewDone" class="hidden">
+      <div class="section-title">完了</div>
+      <div class="done-box" id="doneText"></div>
+      <button id="doneToCalendar" class="primary">日付選択へ戻る</button>
+    </section>
+
+    <!-- flatpickr JS -->
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
 
-    <script src="./app.js?v=20260102-1"></script>
+    <!-- App（ここにバージョン付けるとキャッシュ事故が減る！） -->
+    <script src="./app.js?v=20260103_1"></script>
   </body>
 </html>
