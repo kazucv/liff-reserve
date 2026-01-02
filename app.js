@@ -3,51 +3,47 @@ const GAS_URL =
   "https://script.google.com/macros/s/AKfycbx2e8Xd8kAQ--kWErdGY7CBtsJ8gDSD87SEQbtDHrfM5HL0xxGhfpzZ8hQ5Qjj8bRg/exec";
 const LIFF_ID = "2008793696-IEhzXwEH";
 
-// ====== UI ======
+// ====== DOM ======
 const statusEl = document.getElementById("status");
-const slotsRoot = document.getElementById("slots");
-const slotCountEl = document.getElementById("slotCount");
-const calendarRoot = document.getElementById("calendar");
+const calendarEl = document.getElementById("calendar");
+const slotsEl = document.getElementById("slots");
 
 const log = (msg) => {
   console.log(msg);
   if (statusEl) statusEl.textContent = msg;
 };
 
-// ====== utils ======
-function toYm(dateStr) {
-  // "2026-01-05" -> "202601"
-  return String(dateStr || "")
-    .replaceAll("-", "")
-    .slice(0, 6);
-}
-function ymdCompact(dateStr) {
-  // "2026-01-05" -> "20260105"
-  return String(dateStr || "").replaceAll("-", "");
-}
-function formatYmd(y, m, d) {
-  // m: 1-12
-  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-}
-function clearSlots() {
-  if (slotsRoot) slotsRoot.innerHTML = "";
+function ymdCompactFromDate(dateObj) {
+  // Date -> "YYYYMMDD"
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  return `${y}${m}${d}`;
 }
 
-// ====== slots render ======
-function renderSlotsByDate(selectedDateStr) {
-  clearSlots();
+function ymFromDate(dateObj) {
+  // Date -> "YYYYMM"
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  return `${y}${m}`;
+}
 
-  const ymd = ymdCompact(selectedDateStr);
-  const slots = (window.allSlots || []).filter((s) =>
-    String(s.slotId || "").startsWith(ymd)
-  );
-
-  if (slotCountEl) slotCountEl.textContent = `枠OK: ${slots.length}件`;
-
-  if (slots.length === 0) {
+function clearSlotsUI(message = "") {
+  if (!slotsEl) return;
+  slotsEl.innerHTML = "";
+  if (message) {
     const p = document.createElement("p");
-    p.textContent = "この日は予約枠がありません";
-    slotsRoot.appendChild(p);
+    p.textContent = message;
+    slotsEl.appendChild(p);
+  }
+}
+
+function renderSlotsList(slots, onPick) {
+  if (!slotsEl) return;
+  slotsEl.innerHTML = "";
+
+  if (!slots || slots.length === 0) {
+    clearSlotsUI("この日は予約枠がありません。");
     return;
   }
 
@@ -55,15 +51,10 @@ function renderSlotsByDate(selectedDateStr) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "slot-btn";
+    // 表示は一旦そのまま（後で整える）
     btn.textContent = `${s.start} 〜 ${s.end}`;
-    btn.style.display = "block";
-    btn.style.margin = "8px 0";
-
-    btn.addEventListener("click", async () => {
-      await reserveSlot(s);
-    });
-
-    slotsRoot.appendChild(btn);
+    btn.addEventListener("click", () => onPick(s));
+    slotsEl.appendChild(btn);
   });
 }
 
@@ -75,7 +66,7 @@ async function postJson(url, payload, timeoutMs = 10000) {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // GASはこれが事故りにくい
       body: JSON.stringify(payload),
       cache: "no-store",
       signal: controller.signal,
@@ -88,227 +79,246 @@ async function postJson(url, payload, timeoutMs = 10000) {
     } catch {
       throw new Error(`JSON parse failed: ${text.slice(0, 200)}`);
     }
+
     return { status: res.status, data };
   } finally {
     clearTimeout(timer);
   }
 }
 
-// ====== API calls ======
-async function loadSlots(profile, dateStr) {
-  log("枠を取得中...");
+// ====== main state ======
+let profile = null;
+let calendar = null;
+
+// slotsByYmd["20260105"] = [ {slotId,...}, ... ]
+let slotsByYmd = {};
+let loadedYm = ""; // 今ロード済みのYYYYMM
+
+function buildSlotsIndex(slots) {
+  const map = {};
+  (slots || []).forEach((s) => {
+    const slotId = String(s.slotId || "");
+    const ymd = slotId.slice(0, 8); // "YYYYMMDD"
+    if (!/^\d{8}$/.test(ymd)) return;
+    if (!map[ymd]) map[ymd] = [];
+    map[ymd].push(s);
+  });
+  return map;
+}
+
+function buildEventsFromIndex(indexMap) {
+  // FullCalendarに「枠あり日」を点で示すためのイベント配列
+  // ※見た目は後でいじれる。まずは出ること優先。
+  const events = [];
+  Object.keys(indexMap).forEach((ymd) => {
+    const y = ymd.slice(0, 4);
+    const m = ymd.slice(4, 6);
+    const d = ymd.slice(6, 8);
+    const iso = `${y}-${m}-${d}`;
+
+    events.push({
+      title: "◦", // ドット代わり（後でCSSで点にしたりできる）
+      start: iso,
+      allDay: true,
+      display: "list-item", // 月表示で邪魔になりにくい
+    });
+  });
+  return events;
+}
+
+async function loadMonthSlots(ym) {
+  if (!profile) throw new Error("profile_missing");
+  if (!/^\d{6}$/.test(ym)) throw new Error("ym_invalid");
+
+  log("枠を取得中…");
 
   const payload = {
     action: "getSlots",
     userId: profile.userId,
-    ym: toYm(dateStr),
+    ym,
   };
 
-  const { data } = await postJson(GAS_URL, payload);
+  const { data } = await postJson(GAS_URL, payload, 12000);
+
   if (!data?.ok || !Array.isArray(data.slots)) {
-    log(`枠取得NG: ${JSON.stringify(data)}`);
-    return false;
+    throw new Error(`getSlots_failed: ${JSON.stringify(data)}`);
   }
 
-  window.allSlots = data.slots; // 月の全枠
-  return true;
+  loadedYm = ym;
+  slotsByYmd = buildSlotsIndex(data.slots);
+
+  log("日付をタップしてね");
 }
 
-// ✅ ここが「既存の予約処理に接続」＝ reserveSlot
+function showSlotsForDate(dateObj) {
+  const ymd = ymdCompactFromDate(dateObj);
+  const list = slotsByYmd[ymd] || [];
+  renderSlotsList(list, async (slot) => {
+    await reserveSlot(slot);
+  });
+}
+
 async function reserveSlot(slot) {
-  // ここは次のステップでフォーム入力に置き換える（今は固定でOK）
-  const payload2 = {
+  if (!profile) return;
+
+  // TODO: 次のステップでフォーム入力にする（今は仮）
+  const payload = {
     action: "createReservation",
-    userId: window.profile.userId,
+    userId: profile.userId,
     slotId: slot.slotId,
     name: "テスト太郎",
     tel: "09012345678",
-    note: "LIFFテスト予約",
+    note: "LIFF予約",
   };
 
-  log(`予約中... ${slot.slotId}`);
-  const r2 = await postJson(GAS_URL, payload2, 10000);
+  log(`予約中… ${slot.slotId}`);
 
-  if (!r2.data?.ok) {
-    log(`予約NG: ${JSON.stringify(r2.data)}`);
+  const { data } = await postJson(GAS_URL, payload, 15000);
+
+  if (!data?.ok) {
+    log(`予約NG: ${JSON.stringify(data)}`);
     return;
   }
 
-  log(`予約OK ✅ ${r2.data.reservationId}`);
+  log(`予約OK ✅ ${data.reservationId}`);
 
-  // 予約後は同月を取り直して再描画（枠が消えるのが見える）
-  await loadAndShow(window.selectedDateStr);
+  // 予約後：同じ月を取り直して、枠が消える挙動が見えるように
+  const ym = loadedYm || slot.slotId.slice(0, 6);
+  await loadMonthSlots(ym);
+
+  // カレンダー側の「枠ありドット」も更新
+  calendar.removeAllEvents();
+  calendar.addEventSource(buildEventsFromIndex(slotsByYmd));
 }
 
-// ====== calendar (simple) ======
-function buildCalendarUI() {
-  if (!calendarRoot) return;
+// ====== swipe (簡易) ======
+// FullCalendarは「標準でスマホの月スワイプ」が弱いことが多いので、
+// まずは簡易スワイプで prev/next を呼ぶ（必要なら後で強化）
+function attachSimpleSwipe(targetEl, onSwipeLeft, onSwipeRight) {
+  let startX = 0;
+  let startY = 0;
+  const threshold = 40;
 
-  calendarRoot.innerHTML = `
-    <div style="display:flex; gap:12px; align-items:center; margin: 12px 0;">
-      <button id="calPrev" type="button">←</button>
-      <div id="calTitle" style="font-weight:bold;"></div>
-      <button id="calNext" type="button">→</button>
-    </div>
-    <div id="calGrid" style="display:grid; grid-template-columns: repeat(7, 1fr); gap:6px;"></div>
-  `;
+  targetEl.addEventListener(
+    "touchstart",
+    (e) => {
+      const t = e.touches[0];
+      startX = t.clientX;
+      startY = t.clientY;
+    },
+    { passive: true }
+  );
 
-  document
-    .getElementById("calPrev")
-    .addEventListener("click", () => moveMonth(-1));
-  document
-    .getElementById("calNext")
-    .addEventListener("click", () => moveMonth(1));
+  targetEl.addEventListener(
+    "touchend",
+    (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+
+      // 縦スクロールを邪魔しない
+      if (Math.abs(dy) > Math.abs(dx)) return;
+      if (Math.abs(dx) < threshold) return;
+
+      if (dx < 0) onSwipeLeft?.();
+      else onSwipeRight?.();
+    },
+    { passive: true }
+  );
 }
 
-function renderCalendar(year, month1to12) {
-  // month1to12: 1-12
-  const titleEl = document.getElementById("calTitle");
-  const gridEl = document.getElementById("calGrid");
-  if (!gridEl) return;
-
-  if (titleEl) titleEl.textContent = `${year}年 ${month1to12}月`;
-  gridEl.innerHTML = "";
-
-  const dow = ["日", "月", "火", "水", "木", "金", "土"];
-  dow.forEach((d) => {
-    const cell = document.createElement("div");
-    cell.textContent = d;
-    cell.style.fontSize = "12px";
-    cell.style.opacity = "0.7";
-    cell.style.textAlign = "center";
-    gridEl.appendChild(cell);
-  });
-
-  const first = new Date(year, month1to12 - 1, 1);
-  const last = new Date(year, month1to12, 0);
-  const startBlank = first.getDay(); // 0-6
-  const days = last.getDate();
-
-  // blank
-  for (let i = 0; i < startBlank; i++) {
-    gridEl.appendChild(document.createElement("div"));
-  }
-
-  // days
-  for (let d = 1; d <= days; d++) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = String(d);
-    btn.style.padding = "10px 0";
-    btn.style.borderRadius = "10px";
-    btn.style.border = "1px solid #ddd";
-    btn.style.background = "#fff";
-
-    const dateStr = formatYmd(year, month1to12, d);
-
-    // 選択日のハイライト（雑に）
-    if (window.selectedDateStr === dateStr) {
-      btn.style.border = "2px solid #000";
-      btn.style.fontWeight = "bold";
-    }
-
-    btn.addEventListener("click", async () => {
-      await setSelectedDate(dateStr);
-    });
-
-    gridEl.appendChild(btn);
-  }
-}
-
-function moveMonth(delta) {
-  // window.currentYM: {y, m}
-  let y = window.currentYM.y;
-  let m = window.currentYM.m + delta;
-  if (m <= 0) {
-    m = 12;
-    y -= 1;
-  }
-  if (m >= 13) {
-    m = 1;
-    y += 1;
-  }
-  window.currentYM = { y, m };
-
-  // 月移動だけなら「枠取得」はその月の最初の日に合わせて取る
-  const firstDay = formatYmd(y, m, 1);
-  // 選択日は「その月の1日」に寄せる（好みで今日にしてもOK）
-  setSelectedDate(firstDay);
-}
-
-async function setSelectedDate(dateStr) {
-  window.selectedDateStr = dateStr;
-
-  // 年月更新（カレンダー表示をその月に合わせる）
-  const y = Number(dateStr.slice(0, 4));
-  const m = Number(dateStr.slice(5, 7));
-  window.currentYM = { y, m };
-
-  // まずカレンダーを更新（選択ハイライト反映）
-  renderCalendar(y, m);
-
-  // 月の枠を取得してから、その日の枠だけ表示
-  await loadAndShow(dateStr);
-}
-
-// これがメインの「選択日を基準に、枠取得→表示」
-async function loadAndShow(dateStr) {
-  clearSlots();
-
-  // 月が変わったら取り直す（毎回取ってもいいけど、まずはシンプルに）
-  const ok = await loadSlots(window.profile, dateStr);
-  if (!ok) return;
-
-  renderSlotsByDate(dateStr);
-  log("枠を選んでね");
-}
-
-// ====== main ======
+// ====== boot ======
 async function run() {
   if (!window.liff) {
     log("LIFF SDKが読み込めてない…");
     return;
   }
-  if (!calendarRoot || !slotsRoot) {
-    log("必要なDOMが見つからない…（index.html確認してね）");
+  if (!window.FullCalendar) {
+    log("FullCalendarが読み込めてない…（CDN確認）");
     return;
   }
 
   try {
-    log("1) init LIFF...");
+    log("1) init LIFF…");
     await liff.init({ liffId: LIFF_ID });
 
     if (!liff.isLoggedIn()) {
-      log("2) login...");
+      log("2) login…");
       liff.login();
       return;
     }
 
-    log("3) getting profile...");
-    const profile = await liff.getProfile();
-    window.profile = profile;
-
+    log("3) getting profile…");
+    profile = await liff.getProfile();
     log(`こんにちは、${profile.displayName} さん 😊`);
 
-    // 初期日付（今日）
     const today = new Date();
-    const initDate = formatYmd(
-      today.getFullYear(),
-      today.getMonth() + 1,
-      today.getDate()
+    const initialYm = ymFromDate(today);
+
+    // ① 今月の枠ロード
+    await loadMonthSlots(initialYm);
+
+    // ② カレンダー作成
+    calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: "dayGridMonth",
+      locale: "ja",
+      height: "auto",
+      headerToolbar: {
+        left: "prev",
+        center: "title",
+        right: "next",
+      },
+
+      // 「枠あり日」を点で表示（イベントとして追加）
+      events: buildEventsFromIndex(slotsByYmd),
+
+      // 日付タップ → その日の枠表示
+      dateClick: async (info) => {
+        // 表示中の月が変わってるならロードし直す
+        const viewStart = info.view.currentStart; // 表示中月の先頭付近
+        const ym = ymFromDate(viewStart);
+        if (ym !== loadedYm) {
+          await loadMonthSlots(ym);
+          calendar.removeAllEvents();
+          calendar.addEventSource(buildEventsFromIndex(slotsByYmd));
+        }
+
+        showSlotsForDate(info.date);
+      },
+    });
+
+    calendar.render();
+
+    // ③ 初期表示：今日の枠を下に出しておく（気分良い）
+    showSlotsForDate(today);
+
+    // ④ 簡易スワイプで月移動（邪魔なら外してOK）
+    attachSimpleSwipe(
+      calendarEl,
+      async () => {
+        calendar.next();
+        const ym = ymFromDate(calendar.getDate());
+        if (ym !== loadedYm) {
+          await loadMonthSlots(ym);
+          calendar.removeAllEvents();
+          calendar.addEventSource(buildEventsFromIndex(slotsByYmd));
+        }
+      },
+      async () => {
+        calendar.prev();
+        const ym = ymFromDate(calendar.getDate());
+        if (ym !== loadedYm) {
+          await loadMonthSlots(ym);
+          calendar.removeAllEvents();
+          calendar.addEventSource(buildEventsFromIndex(slotsByYmd));
+        }
+      }
     );
 
-    // カレンダーUI生成＆初回描画
-    buildCalendarUI();
-    window.currentYM = { y: today.getFullYear(), m: today.getMonth() + 1 };
-    window.selectedDateStr = initDate;
-    renderCalendar(window.currentYM.y, window.currentYM.m);
-
-    // 初回ロード
-    await loadAndShow(initDate);
+    log("日付をタップしてね");
   } catch (e) {
-    log(`ERROR: ${e?.name || "Error"} / ${e?.message || e}`);
     console.error(e);
+    log(`ERROR: ${e?.message || e}`);
   }
 }
 

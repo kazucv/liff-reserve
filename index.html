@@ -5,19 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>LIFF Reserve</title>
+
+    <!-- LIFF -->
     <script
       defer
       src="https://static.line-scdn.net/liff/edge/2/sdk.js"
     ></script>
+
+    <!-- FullCalendar (global build) -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css"
+    />
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"
+    ></script>
+
+    <style>
+      body {
+        font-family: -apple-system, system-ui, "Segoe UI", Roboto,
+          "Noto Sans JP", sans-serif;
+        margin: 16px;
+      }
+      #status {
+        margin: 8px 0 16px;
+      }
+      #calendar {
+        max-width: 720px;
+        margin: 0 auto 16px;
+      }
+      #slots {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      .slot-btn {
+        display: block;
+        width: 100%;
+        margin: 8px 0;
+        padding: 12px;
+        font-size: 16px;
+      }
+      .muted {
+        opacity: 0.7;
+      }
+    </style>
   </head>
+
   <body>
-    <h1>LIFF Reserve</h1>
+    <h1>予約</h1>
     <p id="status">Loading...</p>
 
     <div id="calendar"></div>
 
-    <p id="slotCount"></p>
-    <div id="slots"></div>
+    <div id="slots">
+      <p class="muted">日付をタップすると枠が表示されます。</p>
+    </div>
 
     <script defer src="./app.js"></script>
   </body>
