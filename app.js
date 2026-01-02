@@ -1,29 +1,32 @@
-console.log("APP VERSION: 2026-01-02 unified reserve");
-
-document.getElementById("status").textContent =
-  "APP VERSION: 2026-01-02 unified reserve";
-
 // ====== CONFIG ======
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbx2e8Xd8kAQ--kWErdGY7CBtsJ8gDSD87SEQbtDHrfM5HL0xxGhfpzZ8hQ5Qjj8bRg/exec";
 const LIFF_ID = "2008793696-IEhzXwEH";
 
-// ====== UI helpers ======
+// ====== UI ======
 const statusEl = document.getElementById("status");
 const slotsRoot = document.getElementById("slots");
 const dateInput = document.getElementById("date");
+const calendarRoot = document.getElementById("calendar");
 const slotCountEl = document.getElementById("slotCount");
+const selectedDateLabel = document.getElementById("selectedDateLabel");
 
 const log = (msg) => {
   console.log(msg);
   if (statusEl) statusEl.textContent = msg;
 };
 
+function fmtYmd(dateObj) {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, "0");
+  const d = String(dateObj.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function toYm(dateStr) {
   // "2026-01-05" -> "202601"
   return String(dateStr || "")
     .replaceAll("-", "")
-    .replaceAll("/", "")
     .slice(0, 6);
 }
 
@@ -38,39 +41,14 @@ function clearSlots() {
   if (slotsRoot) slotsRoot.innerHTML = "";
 }
 
-function renderSlotsByDate(selectedDateStr) {
-  if (!slotsRoot) return;
+function setSlotCount(n) {
+  if (slotCountEl) slotCountEl.textContent = `枠: ${n}件`;
+}
 
-  slotsRoot.innerHTML = "";
-
-  const ymd = ymdCompact(selectedDateStr);
-  const slots = (window.allSlots || []).filter((s) =>
-    String(s.slotId || "").startsWith(ymd)
-  );
-
-  if (slotCountEl) {
-    slotCountEl.textContent = `枠OK: ${slots.length}件（押して予約してね）`;
-  }
-
-  if (slots.length === 0) {
-    const p = document.createElement("p");
-    p.textContent = "この日は予約枠がありません";
-    slotsRoot.appendChild(p);
-    return;
-  }
-
-  slots.forEach((s) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "slot-btn";
-    btn.textContent = `${s.start} 〜 ${s.end}`;
-
-    btn.addEventListener("click", async () => {
-      await reserveSlot(s);
-    });
-
-    slotsRoot.appendChild(btn);
-  });
+function setSelectedDateLabel(dateStr) {
+  if (!selectedDateLabel) return;
+  // 見やすく "YYYY/MM/DD"
+  selectedDateLabel.textContent = String(dateStr || "-").replaceAll("-", "/");
 }
 
 // ====== network ======
@@ -100,83 +78,163 @@ async function postJson(url, payload, timeoutMs = 10000) {
   }
 }
 
-// ====== GAS: load slots (monthly) ======
-async function loadAndShow(dateStr) {
-  clearSlots();
-  log("枠を取得中...");
+// ====== state ======
+const state = {
+  profile: null,
+  allSlots: [], // 現在月の slots
+  currentYm: "", // "202601"
+  fp: null, // flatpickr instance
+};
 
-  const profile = window.profile;
-  if (!profile?.userId) {
-    log("profileが取れてない…");
+// ====== rendering ======
+function renderSlotsByDate(selectedDateStr) {
+  clearSlots();
+  setSelectedDateLabel(selectedDateStr);
+
+  const ymd = ymdCompact(selectedDateStr);
+  const filtered = (state.allSlots || []).filter((s) =>
+    String(s.slotId || "").startsWith(ymd)
+  );
+
+  setSlotCount(filtered.length);
+
+  if (!filtered.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "この日は予約枠がありません。";
+    slotsRoot.appendChild(p);
     return;
   }
+
+  filtered.forEach((s) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "slot-btn";
+
+    // 表示は一旦 start/end。後で "10:00〜11:00" みたいに整形しよう
+    btn.textContent = `${s.start} 〜 ${s.end}`;
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await reserveSlot(s);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    slotsRoot.appendChild(btn);
+  });
+}
+
+// ====== GAS actions ======
+async function fetchSlotsForYm(ym) {
+  if (!state.profile) throw new Error("profile_not_ready");
+  log(`枠を取得中... (${ym})`);
 
   const payload = {
     action: "getSlots",
-    userId: profile.userId,
-    ym: toYm(dateStr),
+    userId: state.profile.userId,
+    ym,
   };
 
-  const { data } = await postJson(GAS_URL, payload);
+  const { data } = await postJson(GAS_URL, payload, 15000);
 
   if (!data?.ok || !Array.isArray(data.slots)) {
-    log(`枠取得NG: ${JSON.stringify(data)}`);
-    return;
+    throw new Error(`getSlots_failed: ${JSON.stringify(data)}`);
   }
 
-  window.allSlots = data.slots; // ✅ 月の全枠
-  renderSlotsByDate(dateStr); // ✅ 日付で絞って描画
-  log("日付を選んでね");
+  state.allSlots = data.slots;
+  state.currentYm = ym;
+
+  return data.slots;
 }
 
-// ====== GAS: create reservation ======
 async function reserveSlot(slot) {
-  const profile = window.profile;
-  if (!profile?.userId) {
-    log("profileが取れてない…");
+  if (!state.profile) return;
+
+  log(`予約中... ${slot.slotId}`);
+
+  // TODO: 次ステップでフォームにする（name/tel/note）
+  const payload2 = {
+    action: "createReservation",
+    userId: state.profile.userId,
+    slotId: slot.slotId,
+    name: "テスト太郎",
+    tel: "09012345678",
+    note: "LIFFテスト予約",
+  };
+
+  const { data } = await postJson(GAS_URL, payload2, 15000);
+
+  if (!data?.ok) {
+    log(`予約NG: ${JSON.stringify(data)}`);
     return;
   }
 
-  // 二度押し防止（簡易）
-  if (window.__reserving) return;
-  window.__reserving = true;
+  log(`予約OK ✅ ${data.reservationId}`);
 
-  try {
-    log(`予約中... ${slot.slotId}`);
+  // 予約で枠が埋まった反映のため、同月の枠を取り直して再描画
+  const selected = dateInput.value;
+  const ym = toYm(selected);
+  await fetchSlotsForYm(ym);
+  renderSlotsByDate(selected);
+}
 
-    const payload2 = {
-      action: "createReservation",
-      userId: profile.userId,
-      slotId: slot.slotId,
-      name: "テスト太郎", // 次のステップでフォーム入力に置換
-      tel: "09012345678", // 次のステップでフォーム入力に置換
-      note: "LIFFテスト予約", // 任意
-    };
+// ====== flatpickr setup ======
+function initCalendar(initialDateStr) {
+  if (!dateInput || !calendarRoot) throw new Error("calendar_dom_missing");
 
-    const r2 = await postJson(GAS_URL, payload2, 10000);
+  // flatpickr を inline 表示（常に月カレンダー）
+  state.fp = flatpickr(dateInput, {
+    locale: "ja",
+    inline: true,
+    dateFormat: "Y-m-d",
+    defaultDate: initialDateStr,
+    appendTo: calendarRoot,
 
-    if (!r2.data?.ok) {
-      log(`予約NG: ${JSON.stringify(r2.data)}`);
-      return;
-    }
+    onReady: (_selectedDates, dateStr) => {
+      // 初回描画
+      setSelectedDateLabel(dateStr);
+    },
 
-    log(`予約OK ✅ ${r2.data.reservationId}`);
+    onChange: (_selectedDates, dateStr) => {
+      // 日付クリック → slots を日付でフィルタして出す
+      renderSlotsByDate(dateStr);
+    },
 
-    // ✅ 予約後：同じ月の枠を再取得して再描画
-    await loadAndShow(dateInput.value);
-  } finally {
-    window.__reserving = false;
-  }
+    onMonthChange: async (_selectedDates, _dateStr, instance) => {
+      // 月移動したら、その月の枠を取り直す
+      try {
+        const viewDate =
+          instance.currentYear +
+          "-" +
+          String(instance.currentMonth + 1).padStart(2, "0") +
+          "-01";
+        const ym = toYm(viewDate);
+
+        // 同月なら何もしない（連打対策）
+        if (ym === state.currentYm) return;
+
+        await fetchSlotsForYm(ym);
+
+        // 月移動後の「選択日」で再描画（選択日が別月なら月初に寄せてもOK）
+        const selected =
+          dateInput.value ||
+          fmtYmd(new Date(instance.currentYear, instance.currentMonth, 1));
+        renderSlotsByDate(selected);
+        log("日付を選んでね");
+      } catch (e) {
+        log(`枠取得NG: ${e?.message || e}`);
+      }
+    },
+  });
 }
 
 // ====== main ======
 async function run() {
   if (!window.liff) {
     log("LIFF SDKが読み込めてない…");
-    return;
-  }
-  if (!dateInput) {
-    log("date input が見つからない…（index.html確認してね）");
     return;
   }
 
@@ -191,24 +249,22 @@ async function run() {
     }
 
     log("3) getting profile...");
-    const profile = await liff.getProfile();
-    window.profile = profile; // ✅ どこからでも使えるように保存
-    log(`こんにちは、${profile.displayName} さん 😊`);
+    state.profile = await liff.getProfile();
+    log(`こんにちは、${state.profile.displayName} さん 😊`);
 
-    // 今日を初期日付にセット
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-    if (!dateInput.value) dateInput.value = `${yyyy}-${mm}-${dd}`;
+    // 初期日付は今日
+    const todayStr = fmtYmd(new Date());
+    const initialDateStr = dateInput.value || todayStr;
 
-    // 日付変更で再取得（※月が変わるのでgetSlotsも変わる想定）
-    dateInput.addEventListener("change", async () => {
-      await loadAndShow(dateInput.value);
-    });
+    // カレンダー初期化（inline）
+    initCalendar(initialDateStr);
 
-    // 初回ロード
-    await loadAndShow(dateInput.value);
+    // 初期月の枠を取得して描画
+    const ym = toYm(initialDateStr);
+    await fetchSlotsForYm(ym);
+    renderSlotsByDate(initialDateStr);
+
+    log("日付を選んでね");
   } catch (e) {
     log(`ERROR: ${e?.name || "Error"} / ${e?.message || e}`);
     console.error(e);
