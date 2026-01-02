@@ -1,3 +1,8 @@
+console.log("APP VERSION: 2026-01-02 unified reserve");
+
+document.getElementById("status").textContent =
+  "APP VERSION: 2026-01-02 unified reserve";
+
 // ====== CONFIG ======
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbx2e8Xd8kAQ--kWErdGY7CBtsJ8gDSD87SEQbtDHrfM5HL0xxGhfpzZ8hQ5Qjj8bRg/exec";
@@ -7,6 +12,7 @@ const LIFF_ID = "2008793696-IEhzXwEH";
 const statusEl = document.getElementById("status");
 const slotsRoot = document.getElementById("slots");
 const dateInput = document.getElementById("date");
+const slotCountEl = document.getElementById("slotCount");
 
 const log = (msg) => {
   console.log(msg);
@@ -17,47 +23,54 @@ function toYm(dateStr) {
   // "2026-01-05" -> "202601"
   return String(dateStr || "")
     .replaceAll("-", "")
+    .replaceAll("/", "")
     .slice(0, 6);
 }
 
-function toYmdCompact(dateStr) {
-  // "2026-01-05" -> "20260105"
-  return String(dateStr || "").replaceAll("-", "");
+function ymdCompact(dateStr) {
+  // "2026-01-22" or "2026/01/22" -> "20260122"
+  return String(dateStr || "")
+    .replaceAll("-", "")
+    .replaceAll("/", "");
 }
 
 function clearSlots() {
   if (slotsRoot) slotsRoot.innerHTML = "";
 }
 
-function renderSlots(slots, selectedDateStr, onPick) {
-  clearSlots();
+function renderSlotsByDate(selectedDateStr) {
+  if (!slotsRoot) return;
 
-  const ymd = toYmdCompact(selectedDateStr); // 20260105
-  const filtered = (slots || []).filter((s) =>
+  slotsRoot.innerHTML = "";
+
+  const ymd = ymdCompact(selectedDateStr);
+  const slots = (window.allSlots || []).filter((s) =>
     String(s.slotId || "").startsWith(ymd)
   );
 
-  if (filtered.length === 0) {
-    if (slotsRoot) slotsRoot.textContent = "この日は予約枠がありません。";
+  if (slotCountEl) {
+    slotCountEl.textContent = `枠OK: ${slots.length}件（押して予約してね）`;
+  }
+
+  if (slots.length === 0) {
+    const p = document.createElement("p");
+    p.textContent = "この日は予約枠がありません";
+    slotsRoot.appendChild(p);
     return;
   }
 
-  const ul = document.createElement("ul");
-  filtered.forEach((s) => {
-    const li = document.createElement("li");
+  slots.forEach((s) => {
     const btn = document.createElement("button");
-
-    // 表示は一旦 start/end そのまま（後で整える）
+    btn.type = "button";
+    btn.className = "slot-btn";
     btn.textContent = `${s.start} 〜 ${s.end}`;
-    btn.style.display = "block";
-    btn.style.margin = "8px 0";
-    btn.onclick = () => onPick(s);
 
-    li.appendChild(btn);
-    ul.appendChild(li);
+    btn.addEventListener("click", async () => {
+      await reserveSlot(s);
+    });
+
+    slotsRoot.appendChild(btn);
   });
-
-  if (slotsRoot) slotsRoot.appendChild(ul);
 }
 
 // ====== network ======
@@ -87,6 +100,75 @@ async function postJson(url, payload, timeoutMs = 10000) {
   }
 }
 
+// ====== GAS: load slots (monthly) ======
+async function loadAndShow(dateStr) {
+  clearSlots();
+  log("枠を取得中...");
+
+  const profile = window.profile;
+  if (!profile?.userId) {
+    log("profileが取れてない…");
+    return;
+  }
+
+  const payload = {
+    action: "getSlots",
+    userId: profile.userId,
+    ym: toYm(dateStr),
+  };
+
+  const { data } = await postJson(GAS_URL, payload);
+
+  if (!data?.ok || !Array.isArray(data.slots)) {
+    log(`枠取得NG: ${JSON.stringify(data)}`);
+    return;
+  }
+
+  window.allSlots = data.slots; // ✅ 月の全枠
+  renderSlotsByDate(dateStr); // ✅ 日付で絞って描画
+  log("日付を選んでね");
+}
+
+// ====== GAS: create reservation ======
+async function reserveSlot(slot) {
+  const profile = window.profile;
+  if (!profile?.userId) {
+    log("profileが取れてない…");
+    return;
+  }
+
+  // 二度押し防止（簡易）
+  if (window.__reserving) return;
+  window.__reserving = true;
+
+  try {
+    log(`予約中... ${slot.slotId}`);
+
+    const payload2 = {
+      action: "createReservation",
+      userId: profile.userId,
+      slotId: slot.slotId,
+      name: "テスト太郎", // 次のステップでフォーム入力に置換
+      tel: "09012345678", // 次のステップでフォーム入力に置換
+      note: "LIFFテスト予約", // 任意
+    };
+
+    const r2 = await postJson(GAS_URL, payload2, 10000);
+
+    if (!r2.data?.ok) {
+      log(`予約NG: ${JSON.stringify(r2.data)}`);
+      return;
+    }
+
+    log(`予約OK ✅ ${r2.data.reservationId}`);
+
+    // ✅ 予約後：同じ月の枠を再取得して再描画
+    await loadAndShow(dateInput.value);
+  } finally {
+    window.__reserving = false;
+  }
+}
+
 // ====== main ======
 async function run() {
   if (!window.liff) {
@@ -110,6 +192,7 @@ async function run() {
 
     log("3) getting profile...");
     const profile = await liff.getProfile();
+    window.profile = profile; // ✅ どこからでも使えるように保存
     log(`こんにちは、${profile.displayName} さん 😊`);
 
     // 今日を初期日付にセット
@@ -119,53 +202,12 @@ async function run() {
     const dd = String(today.getDate()).padStart(2, "0");
     if (!dateInput.value) dateInput.value = `${yyyy}-${mm}-${dd}`;
 
-    async function loadAndShow(dateStr) {
-      clearSlots();
-      log("枠を取得中...");
+    // 日付変更で再取得（※月が変わるのでgetSlotsも変わる想定）
+    dateInput.addEventListener("change", async () => {
+      await loadAndShow(dateInput.value);
+    });
 
-      const payload = {
-        action: "getSlots",
-        userId: profile.userId,
-        ym: toYm(dateStr),
-      };
-
-      const { data } = await postJson(GAS_URL, payload, 10000);
-
-      if (!data?.ok) {
-        log(`枠取得NG: ${JSON.stringify(data)}`);
-        return;
-      }
-
-      log("日付を選んでね");
-
-      renderSlots(data.slots || [], dateStr, async (slot) => {
-        // 予約（name/tel は固定。次のステップで入力フォームにする）
-        log(`予約中... ${slot.slotId}`);
-
-        const payload2 = {
-          action: "createReservation",
-          userId: profile.userId,
-          slotId: slot.slotId,
-          name: "テスト太郎",
-          tel: "09012345678",
-          note: "LIFFテスト予約",
-        };
-
-        const r2 = await postJson(GAS_URL, payload2, 10000);
-
-        if (!r2.data?.ok) {
-          log(`予約NG: ${JSON.stringify(r2.data)}`);
-          return;
-        }
-
-        log(`予約OK ✅ ${r2.data.reservationId}`);
-
-        // 予約後：同じ日をリロード（枠が埋まる挙動が見える）
-        await loadAndShow(dateInput.value);
-      });
-    }
-
-    dateInput.addEventListener("change", () => loadAndShow(dateInput.value));
+    // 初回ロード
     await loadAndShow(dateInput.value);
   } catch (e) {
     log(`ERROR: ${e?.name || "Error"} / ${e?.message || e}`);
