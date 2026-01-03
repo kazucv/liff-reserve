@@ -105,6 +105,19 @@ function showDone(reserveResult) {
   log(`予約OK: ${rid}`);
 }
 
+function formatJpDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+
+  return `${y}年${m}月${day}日 ${hh}:${mm}`;
+}
+
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -458,7 +471,7 @@ function renderReservationList(items) {
     return;
   }
 
-  // 新しい順にしたい場合（reservationIdが Ryyyymmddhhmmss-xxx っぽいなら概ね並ぶ）
+  // 新しい順
   const sorted = [...items].reverse();
 
   sorted.forEach((it) => {
@@ -467,17 +480,25 @@ function renderReservationList(items) {
     const rid = it.reservationId || it.id || "";
     const status = it.status || "予約済み";
 
+    const statusLabel = status === "予約済み" ? "🟢 予約済み" : "⚪️ 完了";
+
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `
       <div style="font-weight:700;">${fmtYmdJa(ymd)} / ${time}</div>
-      <div style="opacity:.7; margin-top:6px;">${status}</div>
+      <div style="margin-top:6px; font-size:13px;">${statusLabel}</div>
       ${
         rid
           ? `<div style="opacity:.5; margin-top:6px; font-size:12px;">予約ID: ${rid}</div>`
           : ""
       }
     `;
+
+    // 将来の詳細・キャンセル導線用に「押せる」余地を作る（今はconsoleだけ）
+    card.addEventListener("click", () => {
+      console.log("予約詳細", it);
+    });
+
     listRoot.appendChild(card);
   });
 }
