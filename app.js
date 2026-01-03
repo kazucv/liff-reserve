@@ -36,6 +36,10 @@ const viewList = document.getElementById("viewList");
 const listRoot = document.getElementById("listRoot");
 const listStatus = document.getElementById("listStatus");
 
+const tabReserve = document.getElementById("tabReserve");
+const tabList = document.getElementById("tabList");
+const tabSettings = document.getElementById("tabSettings");
+
 // ====== state ======
 let profile = null;
 let fp = null;
@@ -52,6 +56,12 @@ const log = (msg) => {
   console.log(msg);
   if (statusEl) statusEl.textContent = msg;
 };
+
+function setActiveTab(key) {
+  tabReserve?.classList.toggle("is-active", key === "reserve");
+  tabList?.classList.toggle("is-active", key === "list");
+  tabSettings?.classList.toggle("is-active", key === "settings");
+}
 
 function showView(name) {
   viewCalendar.classList.add("hidden");
@@ -540,6 +550,24 @@ async function run() {
       showView("slots");
       renderSlotsForSelectedDate();
       log("時間を選んでね");
+    });
+
+    tabReserve?.addEventListener("click", () => {
+      setActiveTab("reserve");
+      showView("calendar");
+      log("日付を選んでね");
+    });
+
+    tabList?.addEventListener("click", async () => {
+      setActiveTab("list");
+      await openListView(); // さっき作ったやつ
+    });
+
+    tabSettings?.addEventListener("click", () => {
+      setActiveTab("settings");
+      // settings画面を作ってなければ一旦ここは予約へ戻すでもOK
+      // showView("settings");
+      log("設定はこれから作ろう");
     });
 
     // Start
