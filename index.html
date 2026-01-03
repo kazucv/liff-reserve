@@ -8,116 +8,249 @@
     <!-- LIFF -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 
-    <!-- flatpickr (CDN) -->
+    <!-- flatpickr (inline calendar) -->
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+      href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css"
     />
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/ja.js"></script>
 
     <style>
-      body {
-        font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
-        margin: 24px;
-      }
-      h1 {
-        font-family: Georgia, serif;
-        font-size: 56px;
-        margin: 0 0 18px;
-      }
-      #status {
-        margin: 12px 0 18px;
-        white-space: pre-wrap;
-      }
-      .hidden {
-        display: none;
+      :root {
+        --bg: #ffffff;
+        --text: #111;
+        --muted: rgba(17, 17, 17, 0.6);
+        --card: rgba(17, 17, 17, 0.06);
+        --card-strong: rgba(17, 17, 17, 0.08);
+        --shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+        --radius: 18px;
+        --radius-lg: 22px;
+        --tap: rgba(11, 91, 211, 0.12);
       }
 
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        background: var(--bg);
+      }
+      body {
+        margin: 0;
+        color: var(--text);
+        font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        padding-bottom: 92px; /* tabbar space */
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      /* App frame */
+      .app {
+        min-height: 100%;
+      }
+
+      /* Header */
+      .header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      }
+      .header-inner {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .brand {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.1;
+      }
+      .brand .logo {
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+      .brand .sub {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+
+      /* Status (debug / guidance) */
+      #status {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 10px 16px 0;
+        color: var(--muted);
+        font-size: 13px;
+        white-space: pre-wrap;
+      }
+
+      /* Main content */
+      .content {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 10px 16px 18px;
+      }
+
+      .title {
+        font-size: 42px;
+        font-weight: 900;
+        margin: 16px 0 12px;
+        letter-spacing: -0.02em;
+      }
+      .subtitle {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 14px;
+      }
+
+      /* Topbar back */
       .topbar {
         display: flex;
         align-items: center;
         gap: 10px;
-        margin: 10px 0 18px;
+        margin: 12px 0 10px;
       }
       .back {
         border: 0;
-        background: #eee;
+        background: var(--card);
         padding: 10px 12px;
-        border-radius: 10px;
+        border-radius: 999px;
+        font-weight: 700;
+        color: rgba(11, 91, 211, 1);
+      }
+      .back:active {
+        transform: translateY(1px);
       }
 
-      .section-title {
-        font-size: 42px;
-        margin: 6px 0 14px;
+      /* Cards */
+      .card {
+        background: var(--card);
+        border-radius: var(--radius-lg);
+        padding: 14px 16px;
+        box-shadow: var(--shadow);
       }
 
-      /* flatpickr */
-      #date {
-        font-size: 18px;
-        width: 100%;
-        border: 0;
-        background: #f3f3f3;
-        border-radius: 18px;
-        padding: 16px;
-        outline: none;
-      }
+      /* Calendar area */
       #calendar {
-        margin-top: 12px;
+        margin-top: 10px;
+      }
+      /* flatpickr tweaks: iOS-ish */
+      .flatpickr-calendar {
+        width: 100% !important;
+        border: 0 !important;
+        border-radius: var(--radius-lg) !important;
+        box-shadow: var(--shadow) !important;
+        overflow: hidden;
+      }
+      .flatpickr-months {
+        padding: 8px 10px;
+        background: rgba(0, 0, 0, 0.02);
+      }
+      .flatpickr-current-month {
+        font-size: 16px !important;
+        font-weight: 800 !important;
+      }
+      .flatpickr-weekday {
+        color: rgba(0, 0, 0, 0.45) !important;
+        font-weight: 700 !important;
+      }
+      .flatpickr-day {
+        border-radius: 14px !important;
+      }
+      .flatpickr-day.selected,
+      .flatpickr-day.startRange,
+      .flatpickr-day.endRange,
+      .flatpickr-day.selected.inRange {
+        background: #dbeafe !important;
+        border-color: #dbeafe !important;
+        color: #0b5bd3 !important;
+        font-weight: 800 !important;
+      }
+      .flatpickr-day.today {
+        border-color: rgba(0, 0, 0, 0.3) !important;
       }
 
-      /* slots */
+      /* Slots */
+      #slotCount {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 10px;
+      }
       .group {
         margin: 14px 0 18px;
       }
       .group h3 {
-        margin: 0 0 8px;
-        opacity: 0.6;
-        font-weight: 700;
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-weight: 800;
+        letter-spacing: 0.02em;
       }
       .slot-btn {
         width: 100%;
         border: 0;
         padding: 18px 16px;
-        border-radius: 18px;
-        background: #eee;
+        border-radius: var(--radius-lg);
+        background: var(--card);
         margin: 10px 0;
         text-align: left;
         font-size: 18px;
+        font-weight: 800;
         color: #0b5bd3;
       }
-
-      /* form */
-      .card {
-        background: #f3f3f3;
-        padding: 14px 16px;
-        border-radius: 18px;
-        margin: 10px 0 18px;
+      .slot-btn:active {
+        background: var(--tap);
+        transform: translateY(1px);
       }
+
+      /* Form */
       .label {
-        opacity: 0.65;
+        margin-top: 14px;
+        color: var(--muted);
+        font-weight: 800;
+        letter-spacing: 0.02em;
       }
       input,
       textarea {
         width: 100%;
         border: 0;
-        background: #f3f3f3;
-        border-radius: 18px;
+        background: var(--card);
+        border-radius: var(--radius-lg);
         padding: 16px;
         font-size: 16px;
         outline: none;
-        margin: 10px 0;
+        margin: 10px 0 0;
       }
       textarea {
-        min-height: 120px;
+        min-height: 140px;
         resize: vertical;
       }
       .primary {
         width: 100%;
         border: 0;
         padding: 18px 16px;
-        border-radius: 18px;
-        background: #e5e5e5;
+        border-radius: var(--radius-lg);
+        background: var(--card-strong);
         font-size: 18px;
+        font-weight: 900;
         color: #0b5bd3;
+        margin-top: 16px;
+      }
+      .primary:active {
+        transform: translateY(1px);
       }
       .hint {
         opacity: 0.6;
@@ -125,96 +258,232 @@
         margin-top: 10px;
       }
 
-      /* done */
-      .done-box {
-        background: #f3f3f3;
-        padding: 18px 16px;
-        border-radius: 18px;
-        margin: 10px 0 18px;
+      /* Done */
+      .done-actions {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
       }
-      .sub {
-        opacity: 0.7;
+      .ghost {
+        width: 100%;
+        border: 0;
+        padding: 16px;
+        border-radius: var(--radius-lg);
+        background: var(--card);
+        font-size: 16px;
+        font-weight: 800;
+        color: rgba(11, 91, 211, 1);
+      }
+      .ghost:active {
+        transform: translateY(1px);
+      }
+
+      /* Tabbar */
+      .tabbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 20;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+      }
+      .tabbar-inner {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 10px 12px 14px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .tab {
+        border: 0;
+        background: transparent;
+        border-radius: 14px;
+        padding: 10px 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted);
+        font-weight: 800;
+        font-size: 12px;
+      }
+      .tab .ico {
+        font-size: 18px;
+        line-height: 1;
+      }
+      .tab.is-active {
+        color: #0b5bd3;
+        background: rgba(11, 91, 211, 0.08);
+      }
+      .tab:active {
+        transform: translateY(1px);
+      }
+
+      /* Hidden input for flatpickr (we show inline calendar in #calendar) */
+      #date {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+        width: 1px;
+        height: 1px;
       }
     </style>
   </head>
 
   <body>
-    <h1>LIFF Reserve</h1>
+    <div class="app">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-inner">
+          <div class="brand">
+            <div class="logo">b. Reserve</div>
+            <div class="sub">LINE予約</div>
+          </div>
+          <div
+            style="
+              font-weight: 800;
+              color: rgba(0, 0, 0, 0.35);
+              font-size: 12px;
+            "
+          >
+            LIFF
+          </div>
+        </div>
+      </header>
 
-    <div id="status">loading...</div>
+      <!-- Status -->
+      <div id="status">loading...</div>
 
-    <!-- View: Calendar -->
-    <section id="viewCalendar">
-      <div class="section-title">日付選択</div>
-      <input id="date" placeholder="日付を選択" />
-      <div id="calendar"></div>
-    </section>
+      <!-- Content -->
+      <main class="content">
+        <!-- hidden input (flatpickr target) -->
+        <input id="date" />
 
-    <!-- View: Slots -->
-    <section id="viewSlots" class="hidden">
-      <div class="topbar">
-        <button id="backToCalendar" class="back">← 日付選択</button>
-      </div>
+        <!-- View: Calendar -->
+        <section id="viewCalendar">
+          <div class="title">日付選択</div>
+          <div class="subtitle">今日以降の予約可能日を選んでね</div>
+          <div class="card">
+            <div id="calendar"></div>
+          </div>
+        </section>
 
-      <div class="section-title">空き時間</div>
-      <div id="slotCount" class="sub"></div>
+        <!-- View: Slots -->
+        <section id="viewSlots" class="hidden">
+          <div class="topbar">
+            <button id="backToCalendar" class="back">← 日付選択</button>
+          </div>
 
-      <div class="group">
-        <h3>午前</h3>
-        <div id="slotsAM"></div>
-      </div>
+          <div class="title">空き時間</div>
+          <div id="slotCount"></div>
 
-      <div class="group">
-        <h3>午後</h3>
-        <div id="slotsPM"></div>
-      </div>
-    </section>
+          <div class="group">
+            <h3>午前</h3>
+            <div id="slotsAM"></div>
+          </div>
 
-    <!-- View: Form -->
-    <section id="viewForm" class="hidden">
-      <div class="topbar">
-        <button id="backToSlots" class="back">← 空き時間</button>
-      </div>
+          <div class="group">
+            <h3>午後</h3>
+            <div id="slotsPM"></div>
+          </div>
+        </section>
 
-      <div class="section-title">入力</div>
+        <!-- View: Form -->
+        <section id="viewForm" class="hidden">
+          <div class="topbar">
+            <button id="backToSlots" class="back">← 空き時間</button>
+          </div>
 
-      <div class="card" id="summary"></div>
+          <div class="title">入力</div>
 
-      <div class="label">お客様情報</div>
-      <input id="name" placeholder="お名前" autocomplete="name" />
-      <input
-        id="tel"
-        placeholder="電話番号"
-        inputmode="numeric"
-        autocomplete="tel"
-      />
+          <div class="card" id="summary"></div>
 
-      <div class="label" style="margin-top: 14px">メモ</div>
-      <textarea id="note" placeholder="備考（任意）"></textarea>
+          <div class="label">お客様情報</div>
+          <input id="name" placeholder="お名前" autocomplete="name" />
+          <input
+            id="tel"
+            placeholder="電話番号"
+            inputmode="numeric"
+            autocomplete="tel"
+          />
 
-      <button id="confirmBtn" class="primary">確認へ（仮：予約実行）</button>
-      <div class="hint">お名前と電話番号は必須です</div>
-    </section>
+          <div class="label">メモ</div>
+          <textarea id="note" placeholder="備考（任意）"></textarea>
 
-    <!-- View: Done -->
-    <section id="viewDone" class="hidden">
-      <div class="section-title">完了</div>
+          <button id="confirmBtn" class="primary">
+            確認へ（仮：予約実行）
+          </button>
+          <div class="hint">お名前と電話番号は必須です</div>
+        </section>
 
-      <div class="card" id="doneSummary"></div>
+        <!-- View: Done -->
+        <section id="viewDone" class="hidden">
+          <div class="title">完了</div>
+          <div class="card" id="doneText"></div>
 
-      <button id="doneToCalendar" class="primary">別日を予約する</button>
-      <button id="doneToSlots" class="primary" style="margin-top: 10px">
-        同じ日の空き時間を見る
-      </button>
+          <div class="done-actions">
+            <button id="doneToCalendar" class="ghost">別日を予約する</button>
+            <button id="doneToSlots" class="ghost">
+              同じ日の空き時間を見る
+            </button>
+          </div>
+        </section>
+      </main>
 
-      <div class="hint">※予約内容の確認・キャンセル機能は次で追加しよう</div>
-    </section>
+      <!-- Tabbar -->
+      <nav class="tabbar" aria-label="tabbar">
+        <div class="tabbar-inner">
+          <button id="tabReserve" class="tab is-active" type="button">
+            <div class="ico">🗓</div>
+            <div>予約</div>
+          </button>
+          <button id="tabList" class="tab" type="button">
+            <div class="ico">📋</div>
+            <div>予約一覧</div>
+          </button>
+          <button id="tabSettings" class="tab" type="button">
+            <div class="ico">⚙️</div>
+            <div>設定</div>
+          </button>
+        </div>
+      </nav>
+    </div>
 
-    <!-- flatpickr JS -->
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ja.js"></script>
+    <script>
+      // タブの見た目だけ先に切替（ロジックは app.js 側の showView を後で繋ぐ）
+      const tabs = [
+        document.getElementById("tabReserve"),
+        document.getElementById("tabList"),
+        document.getElementById("tabSettings"),
+      ];
 
-    <!-- App（ここにバージョン付けるとキャッシュ事故が減る！） -->
-    <script src="./app.js?v=20260103_3"></script>
+      function setActiveTab(idx) {
+        tabs.forEach((t, i) => {
+          if (!t) return;
+          t.classList.toggle("is-active", i === idx);
+        });
+      }
+
+      // いまは「予約」固定でもOKだけど、押したら見た目だけ切り替え
+      document.getElementById("tabReserve")?.addEventListener("click", () => {
+        setActiveTab(0);
+      });
+      document.getElementById("tabList")?.addEventListener("click", () => {
+        setActiveTab(1);
+        // TODO: 予約一覧 view を作るなら showView("list") などに繋ぐ
+        alert("予約一覧はこれから追加しよう！");
+      });
+      document.getElementById("tabSettings")?.addEventListener("click", () => {
+        setActiveTab(2);
+        // TODO: 設定 view を作るなら showView("settings") などに繋ぐ
+        alert("設定はこれから追加しよう！");
+      });
+    </script>
+
+    <script src="./app.js"></script>
   </body>
 </html>
