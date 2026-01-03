@@ -27,8 +27,10 @@ const telInput = document.getElementById("tel");
 const noteInput = document.getElementById("note");
 const confirmBtn = document.getElementById("confirmBtn");
 
-const doneText = document.getElementById("doneText");
+// const doneText = document.getElementById("doneText");
+const doneSummary = document.getElementById("doneSummary");
 const doneToCalendar = document.getElementById("doneToCalendar");
+const doneToSlots = document.getElementById("doneToSlots");
 
 // ====== state ======
 let profile = null;
@@ -71,7 +73,12 @@ function showDone(reserveResult) {
   const startHm = slot ? hmFromIso(slot.start) || slotIdToHm(slot.slotId) : "";
   const endHm = slot ? hmFromIso(slot.end) || "" : "";
 
-  doneText.innerHTML = `
+  if (!doneSummary) {
+    log("doneSummary が見つからない…（HTMLのid確認してね）");
+    return;
+  }
+
+  doneSummary.innerHTML = `
     <div style="font-weight:700; font-size:18px;">予約できたよ ✅</div>
     <div style="margin-top:8px;" class="sub">予約ID: ${rid}</div>
     <div style="margin-top:8px;" class="sub">日付: ${selectedDate || ""}</div>
@@ -429,12 +436,15 @@ async function run() {
 
     doneToCalendar?.addEventListener("click", () => {
       selectedSlot = null;
-      // 入力を残したくないなら
-      // nameInput.value = "";
-      // telInput.value = "";
-      // noteInput.value = "";
       showView("calendar");
       log("日付を選んでね");
+    });
+
+    doneToSlots?.addEventListener("click", () => {
+      // “同じ日の空き時間を見る”
+      showView("slots");
+      renderSlotsForSelectedDate();
+      log("時間を選んでね");
     });
 
     // Start
