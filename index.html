@@ -432,14 +432,15 @@
             </button>
           </div>
         </section>
-      </main>
 
-      <!-- View: List -->
-      <section id="viewList" class="hidden">
-        <div class="section-title">予約一覧</div>
-        <div id="listStatus" style="opacity: 0.7; margin: 8px 0 14px"></div>
-        <div id="listRoot"></div>
-      </section>
+        <!-- View: List -->
+        <section id="viewList" class="hidden">
+          <div class="section-title">予約一覧</div>
+          <div id="listStatus" style="opacity: 0.7; margin: 8px 0 14px"></div>
+          <div id="listRoot"></div>
+        </section>
+
+      </main>
 
       <!-- Tabbar -->
       <nav class="tabbar" aria-label="tabbar">
@@ -459,38 +460,8 @@
         </div>
       </nav>
     </div>
-
-    <script>
-      // タブの見た目だけ先に切替（ロジックは app.js 側の showView を後で繋ぐ）
-      const tabs = [
-        document.getElementById("tabReserve"),
-        document.getElementById("tabList"),
-        document.getElementById("tabSettings"),
-      ];
-
-      function setActiveTab(idx) {
-        tabs.forEach((t, i) => {
-          if (!t) return;
-          t.classList.toggle("is-active", i === idx);
-        });
-      }
-
-      // いまは「予約」固定でもOKだけど、押したら見た目だけ切り替え
-      document.getElementById("tabReserve")?.addEventListener("click", () => {
-        setActiveTab(0);
-      });
-      document.getElementById("tabList")?.addEventListener("click", () => {
-        setActiveTab(1);
-        // TODO: 予約一覧 view を作るなら showView("list") などに繋ぐ
-        alert("予約一覧はこれから追加しよう！");
-      });
-      document.getElementById("tabSettings")?.addEventListener("click", () => {
-        setActiveTab(2);
-        // TODO: 設定 view を作るなら showView("settings") などに繋ぐ
-        alert("設定はこれから追加しよう！");
-      });
     </script>
 
-    <script src="./app.js?v=20260103_3"></script>
+    <script src="./app.js?v=20260103_4"></script>
   </body>
 </html>
