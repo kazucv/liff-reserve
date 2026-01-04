@@ -13,6 +13,11 @@ const viewSlots = document.getElementById("viewSlots");
 const viewForm = document.getElementById("viewForm");
 const viewDone = document.getElementById("viewDone");
 
+const viewConfirm = document.getElementById("viewConfirm");
+const confirmSummary = document.getElementById("confirmSummary");
+const confirmBackBtn = document.getElementById("confirmBackBtn");
+const confirmSubmitBtn = document.getElementById("confirmSubmitBtn");
+
 const dateInput = document.getElementById("date");
 const calendarRoot = document.getElementById("calendar");
 
@@ -61,6 +66,19 @@ const log = (msg) => {
   if (statusEl) statusEl.textContent = msg;
 };
 
+// ====== available days cache ======
+let availableDaysSetCache = null;
+
+function invalidateAvailableDaysSet() {
+  availableDaysSetCache = null;
+}
+
+function getAvailableDaysSet() {
+  if (availableDaysSetCache) return availableDaysSetCache;
+  availableDaysSetCache = buildAvailableDaysSet();
+  return availableDaysSetCache;
+}
+
 function setActiveTab(key) {
   tabReserve?.classList.toggle("is-active", key === "reserve");
   tabList?.classList.toggle("is-active", key === "list");
@@ -73,20 +91,17 @@ function showView(name) {
   viewForm.classList.add("hidden");
   viewDone.classList.add("hidden");
   viewList?.classList.add("hidden");
+  viewConfirm?.classList.add("hidden");
 
   if (name === "calendar") viewCalendar.classList.remove("hidden");
   if (name === "slots") viewSlots.classList.remove("hidden");
   if (name === "form") viewForm.classList.remove("hidden");
+  if (name === "confirm") viewConfirm?.classList.remove("hidden");
   if (name === "done") viewDone.classList.remove("hidden");
   if (name === "list") viewList?.classList.remove("hidden");
 }
 
 function showDone(reserveResult) {
-  // 予約完了後に入力をクリア（任意）
-  nameInput.value = "";
-  telInput.value = "";
-  noteInput.value = "";
-
   const rid = reserveResult?.reservationId || "(不明)";
 
   const slot = selectedSlot;
@@ -177,8 +192,18 @@ function isAM(slot) {
 }
 
 function clearSlotsUI() {
-  slotsAM.innerHTML = "";
-  slotsPM.innerHTML = "";
+  if (slotsAM) slotsAM.innerHTML = "";
+  if (slotsPM) slotsPM.innerHTML = "";
+}
+
+function resetFormInputs() {
+  if (nameInput) nameInput.value = "";
+  if (telInput) telInput.value = "";
+  if (noteInput) noteInput.value = "";
+}
+
+function resetNoteOnly() {
+  if (noteInput) noteInput.value = "";
 }
 
 // ====== network ======
@@ -215,6 +240,7 @@ async function postJson(url, payload, timeoutMs = 10000) {
 }
 
 async function fetchMyReservations() {
+  if (!profile?.userId) throw new Error("ユーザー情報が取得できていません");
   const payload = {
     action: "myReservations",
     userId: profile.userId,
@@ -236,6 +262,7 @@ async function fetchMyReservations() {
 }
 
 async function fetchSlotsYm(ym) {
+  if (!profile?.userId) throw new Error("ユーザー情報が取得できていません");
   // 既に結果があるならそれを返す
   if (slotsCache.has(ym)) return slotsCache.get(ym);
 
@@ -254,17 +281,18 @@ async function fetchSlotsYm(ym) {
   const p = (async () => {
     const { data, aborted } = await postJson(GAS_URL, payload, 25000);
 
-    // ✅ タイムアウトで中断されたら、静かに終了（UIは前のままでもOK）
-    if (aborted) return [];
+    // ✅ タイムアウトで中断 → null
+    if (aborted) return null;
 
-    // ✅ 古いレスポンスなら捨てる（表示巻き戻り防止）
-    if (mySeq !== slotsReqSeq) return [];
+    // ✅ 古いレスポンス → null
+    if (mySeq !== slotsReqSeq) return null;
 
     if (!data?.ok || !Array.isArray(data.slots)) {
       throw new Error(`getSlots NG: ${JSON.stringify(data)}`);
     }
 
     slotsCache.set(ym, data.slots);
+    invalidateAvailableDaysSet();
     return data.slots;
   })();
 
@@ -282,6 +310,7 @@ async function refreshSlotsYm(ym) {
   // ✅ キャッシュとin-flight両方消して “必ず取り直す”
   slotsCache.delete(ym);
   slotsInFlight.delete(ym);
+  invalidateAvailableDaysSet();
 
   // ✅ 以後のレスポンスを最新世代に寄せる（巻き戻り防止を強める）
   ++slotsReqSeq;
@@ -329,9 +358,11 @@ function initFlatpickr() {
 
       try {
         log("枠を取得中...");
-        await fetchSlotsYm(ym);
-
-        // ✅ slotsが0でも redraw は実行（キャッシュ済み他月の描画もあるため）
+        const slots = await fetchSlotsYm(ym);
+        if (slots === null) {
+          log("通信が不安定みたい。もう一度試してね");
+          return;
+        }
         fp.redraw();
         log("日付を選んでね");
       } catch (e) {
@@ -349,7 +380,7 @@ function initFlatpickr() {
         const slots = await fetchSlotsYm(ym);
 
         // ✅ aborted/古いレスポンスなら描画しない（表示巻き戻り防止）
-        if (!slots) return; // aborted/古いレスポンス
+        if (slots === null) return; // aborted/古いレスポンス
         if (slots.length === 0) {
           log("この月は空きがないみたい");
           fp.redraw();
@@ -394,7 +425,7 @@ function initFlatpickr() {
         const d = pad2(dayElem.dateObj.getDate());
         const ymd = `${y}-${m}-${d}`;
 
-        const available = buildAvailableDaysSet();
+        const available = getAvailableDaysSet();
         if (available.has(ymd)) {
           dayElem.style.boxShadow = "inset 0 -3px 0 rgba(11,91,211,.35)";
           dayElem.style.borderRadius = "14px";
@@ -421,8 +452,12 @@ function renderSlotsForSelectedDate() {
   const am = slots.filter((s) => isAM(s));
   const pm = slots.filter((s) => !isAM(s));
 
-  if (am.length === 0) slotsAM.textContent = "空きなし";
-  if (pm.length === 0) slotsPM.textContent = "空きなし";
+  if (am.length === 0) {
+    if (slotsAM) slotsAM.textContent = "空きなし";
+  }
+  if (pm.length === 0) {
+    if (slotsPM) slotsPM.textContent = "空きなし";
+  }
 
   const renderBtn = (slot) => {
     const btn = document.createElement("button");
@@ -445,8 +480,8 @@ function renderSlotsForSelectedDate() {
     return btn;
   };
 
-  am.forEach((s) => slotsAM.appendChild(renderBtn(s)));
-  pm.forEach((s) => slotsPM.appendChild(renderBtn(s)));
+  if (slotsAM) am.forEach((s) => slotsAM.appendChild(renderBtn(s)));
+  if (slotsPM) pm.forEach((s) => slotsPM.appendChild(renderBtn(s)));
 }
 
 // ====== form view ======
@@ -502,13 +537,54 @@ async function reserveSelected() {
     return;
   }
 
-  // 完了画面
   showDone(r.data);
 
-  // 予約後：その月の枠を更新（押し戻し時に埋まり反映）
+  // ✅ 備考だけクリア（連続予約でも事故らない）
+  resetNoteOnly();
+
   const ym = toYmFromYmd(selectedDate);
   await refreshSlotsYm(ym);
   fp.redraw();
+}
+
+function renderConfirmSummary() {
+  if (!confirmSummary) {
+    log("confirmSummary が見つからない…（HTMLのid確認してね）");
+    return;
+  }
+  const name = String(nameInput.value || "").trim();
+  const tel = normalizeTel(telInput.value);
+  const note = String(noteInput.value || "").trim();
+
+  if (!selectedSlot) return;
+
+  const slot = selectedSlot;
+  const startHm = hmFromIso(slot.start) || slotIdToHm(slot.slotId);
+  const endHm = hmFromIso(slot.end) || "";
+  const ymdLabel = fmtYmdJaWithDow(selectedDate);
+
+  confirmSummary.innerHTML = `
+    <div style="font-weight:700; font-size:16px;">${ymdLabel}</div>
+    <div style="margin-top:6px;">時間：${startHm}〜${endHm}</div>
+    <hr style="opacity:.2; margin:12px 0;" />
+    <div>お名前：${escapeHtml(name)}</div>
+    <div>電話番号：${escapeHtml(tel)}</div>
+    ${
+      note
+        ? `<div>備考：${escapeHtml(note)}</div>`
+        : `<div style="opacity:.6;">備考：なし</div>`
+    }
+  `;
+}
+
+// XSS防止（最低限）
+function escapeHtml(s) {
+  return String(s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function setListStatus(msg) {
@@ -760,17 +836,52 @@ async function run() {
       log("時間を選んでね");
     });
 
-    confirmBtn?.addEventListener("click", async () => {
+    confirmBackBtn?.addEventListener("click", () => {
+      showView("form");
+      log("修正してね");
+    });
+
+    confirmSubmitBtn?.addEventListener("click", async () => {
       try {
-        await reserveSelected();
+        // 二重送信防止
+        confirmSubmitBtn.disabled = true;
+        confirmSubmitBtn.textContent = "予約しています...";
+
+        await reserveSelected(); // ✅ここで初めて予約API
       } catch (e) {
         log(`ERROR: ${e?.message || e}`);
         console.error(e);
+      } finally {
+        confirmSubmitBtn.disabled = false;
+        confirmSubmitBtn.textContent = "この内容で予約する";
       }
+    });
+
+    confirmBtn?.addEventListener("click", () => {
+      if (!selectedSlot) {
+        log("先に時間を選んでね");
+        return;
+      }
+
+      const name = String(nameInput.value || "").trim();
+      const tel = normalizeTel(telInput.value);
+
+      if (!name || !tel) {
+        log("お名前と電話番号は必須だよ");
+        return;
+      }
+
+      renderConfirmSummary();
+      showView("confirm");
+      log("内容を確認してね");
     });
 
     doneToCalendar?.addEventListener("click", () => {
       selectedSlot = null;
+
+      // ✅ 名前とTELは残す / 備考だけ消す
+      resetNoteOnly();
+
       showView("calendar");
       log("日付を選んでね");
     });
