@@ -28,6 +28,8 @@
         --radius: 18px;
         --radius-lg: 22px;
         --tap: rgba(11, 91, 211, 0.12);
+        --tabbar-h: 72px;
+        --safe-b: env(safe-area-inset-bottom, 0px);
       }
       * {
         box-sizing: border-box;
@@ -46,6 +48,9 @@
       }
       .hidden {
         display: none !important;
+      } /* 画面全体のコンテンツを包む要素に付ける */
+      .main {
+        padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
       }
       .app {
         min-height: 100%;
@@ -267,7 +272,7 @@
       }
 
       .tabbar {
-        position: fixed;
+        position: sticky;
         left: 0;
         right: 0;
         bottom: 0;
