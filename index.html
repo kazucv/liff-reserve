@@ -46,9 +46,6 @@
       }
       .hidden {
         display: none !important;
-      } /* 画面全体のコンテンツを包む要素に付ける */
-      .main {
-        padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
       }
       .app {
         min-height: 100%;
@@ -100,6 +97,7 @@
         max-width: 720px;
         margin: 0 auto;
         padding: 10px 16px 18px;
+        padding-bottom: calc(var(--tabbar-h) + var(--safe-b) + 12px);
       }
 
       .title {
