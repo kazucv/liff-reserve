@@ -464,6 +464,11 @@ function fmtYmdJa(ymd) {
   return `${y}年${mo}月${d}日`;
 }
 
+function normalizeYmd(ymd) {
+  // "2026/01/05" → "2026-01-05"
+  return String(ymd || "").replaceAll("/", "-");
+}
+
 function fmtYmdJaWithDow(ymd) {
   // "2026-01-05" を "2026年1月5日(月)" に
   const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -531,7 +536,7 @@ function renderReservationList(items) {
       (it.start ? ymdFromIso(it.start) : "") ||
       (it.slotId ? slotIdToYmd(it.slotId) : "");
 
-    const ymdLabel = fmtYmdJaWithDow(ymdRaw);
+    const ymdLabel = fmtYmdJaWithDow(normalizeYmd(ymdRaw || ""));
 
     // 時間
     const time = fmtTimeRange(it);
