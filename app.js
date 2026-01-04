@@ -477,10 +477,12 @@ function ymdFromIso(iso) {
 }
 
 function fmtTimeRange(item) {
-  // 1) GAS myReservations が返す time を最優先（"10:00〜11:00"）
-  if (item?.time) return String(item.time).replace(/\s/g, "");
+  // ★ GAS myReservations が返す time（最優先）
+  if (item?.time) {
+    return String(item.time).replace(/\s/g, "");
+  }
 
-  // 2) start/end があれば ISO から作る
+  // 保険：start/end or slotId
   const startHm = hmFromIso(item?.start) || slotIdToHm(item?.slotId);
   const endHm = hmFromIso(item?.end) || "";
 
