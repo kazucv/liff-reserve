@@ -48,6 +48,7 @@ let fp = null;
 
 // ym -> slots[]
 const slotsCache = new Map();
+const slotsInFlight = new Map(); // ✅ 取得中Promiseを共有する
 let slotsReqSeq = 0; // ✅ 月の空き取得の「世代番号」
 
 // slotId/start/end を想定
