@@ -621,9 +621,31 @@ function renderReservationList(items) {
       }
 
       if (action === "rebook") {
+        // 対象日のYMDを作る（一覧で表示してるのと同じ元データから）
+        const ymdRaw =
+          it.ymd ||
+          (it.date
+            ? String(it.date).includes("T")
+              ? ymdFromIso(it.date)
+              : it.date
+            : "") ||
+          (it.start ? ymdFromIso(it.start) : "") ||
+          (it.slotId ? slotIdToYmd(it.slotId) : "");
+
+        const ymd = normalizeYmd(ymdRaw);
+
         setActiveTab("reserve");
         showView("calendar");
-        log(`もう一度予約しよう：${ymdLabel}`);
+        log("空きを確認してるよ...");
+
+        try {
+          const ym = toYmFromYmd(ymd);
+          await refreshSlotsYm(ym); // ★最新の空きを取りに行く
+          fp?.setDate(ymd, true); // ★その日を選択（onChange発火→slots表示へ）
+          log("時間を選んでね");
+        } catch (e) {
+          log(`ERROR: ${e?.message || e}`);
+        }
       }
     });
 
