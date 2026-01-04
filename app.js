@@ -606,7 +606,10 @@ function renderReservationList(items) {
         });
 
         if (!data?.ok) {
-          throw new Error(data?.message || "キャンセルに失敗しました");
+          const msg = data?.detail
+            ? `${data.message}: ${data.detail}`
+            : data?.message || "キャンセルに失敗しました";
+          throw new Error(msg);
         }
 
         const items = await fetchMyReservations();
