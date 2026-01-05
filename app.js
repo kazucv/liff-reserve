@@ -1083,3 +1083,89 @@ async function run() {
 }
 
 run();
+
+// ====== swipe back (view internal) ======
+function setupSwipeBack() {
+  let sx = 0,
+    sy = 0,
+    started = false;
+
+  const EDGE = 24; // 左端から何px以内で開始したら有効か
+  const THRESH = 70; // 戻る判定の横移動量
+  const VERTICAL_LIMIT = 60; // 縦ブレ許容
+
+  const isInteractive = (el) => {
+    return el?.closest?.(
+      "input, textarea, select, button, a, .slot-btn, .danger-btn, .ghost-btn"
+    );
+  };
+
+  const onPointerDown = (e) => {
+    if (e.pointerType === "mouse") return; // PCは無視（必要なら有効化OK）
+    if (isInteractive(e.target)) return;
+
+    // 左端からの開始だけ有効
+    if (e.clientX > EDGE) return;
+
+    started = true;
+    sx = e.clientX;
+    sy = e.clientY;
+  };
+
+  const onPointerMove = (e) => {
+    if (!started) return;
+
+    const dx = e.clientX - sx;
+    const dy = Math.abs(e.clientY - sy);
+
+    // 縦に動きすぎたらキャンセル（スクロール優先）
+    if (dy > VERTICAL_LIMIT) {
+      started = false;
+      return;
+    }
+
+    // 右スワイプ判定
+    if (dx > THRESH) {
+      started = false;
+
+      // 今の表示状態に応じて戻る
+      if (!viewSlots.classList.contains("hidden")) {
+        showView("calendar");
+        log("日付を選んでね");
+        return;
+      }
+      if (!viewForm.classList.contains("hidden")) {
+        showView("slots");
+        log("時間を選んでね");
+        return;
+      }
+      if (!viewConfirm.classList.contains("hidden")) {
+        showView("form");
+        log("修正してね");
+        return;
+      }
+      if (!viewDone.classList.contains("hidden")) {
+        showView("calendar");
+        log("日付を選んでね");
+        return;
+      }
+      if (!viewList.classList.contains("hidden")) {
+        setActiveTab("reserve");
+        showView("calendar");
+        log("日付を選んでね");
+        return;
+      }
+    }
+  };
+
+  const onPointerUp = () => {
+    started = false;
+  };
+
+  // pointer events（iOSもだいたいOK）
+  document.addEventListener("pointerdown", onPointerDown, { passive: true });
+  document.addEventListener("pointermove", onPointerMove, { passive: true });
+  document.addEventListener("pointerup", onPointerUp, { passive: true });
+}
+
+setupSwipeBack();
