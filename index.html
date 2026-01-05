@@ -197,7 +197,7 @@
 
       #slotsPM,
       #slotsAM {
-        background: var(--bg);
+        overflow: hidden;
         border-radius: var(--radius);
       }
 
@@ -206,13 +206,14 @@
         border: 0;
         padding: 18px 20px;
         /* border-radius: var(--radius); */
-        background: none;
+        background: var(--bg);
         /* margin: 10px 0; */
         text-align: left;
         font-size: 16px;
         font-weight: bold;
         color: #0b5bd3;
       }
+
       .slot-btn + .slot-btn {
         border-top: 1px solid #eee;
       }
