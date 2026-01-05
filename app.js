@@ -563,10 +563,10 @@ function renderSlotsForSelectedDate() {
   const pm = slots.filter((s) => !isAM(s));
 
   if (am.length === 0) {
-    if (slotsAM) slotsAM.textContent = "空きなし";
+    if (slotsAM) slotsAM.textContent = "─ 空きなし";
   }
   if (pm.length === 0) {
-    if (slotsPM) slotsPM.textContent = "空きなし";
+    if (slotsPM) slotsPM.textContent = "─ 空きなし";
   }
 
   const renderBtn = (slot) => {
