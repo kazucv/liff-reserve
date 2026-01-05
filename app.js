@@ -66,6 +66,103 @@ const log = (msg) => {
   if (statusEl) statusEl.textContent = msg;
 };
 
+// ====== modal (cancel confirm) ======
+const modalOverlay = document.getElementById("modalOverlay");
+const cancelModal = document.getElementById("cancelModal");
+const cancelModalText = document.getElementById("cancelModalText");
+const cancelModalMeta = document.getElementById("cancelModalMeta");
+const cancelModalYes = document.getElementById("cancelModalYes");
+const cancelModalNo = document.getElementById("cancelModalNo");
+const cancelModalClose = document.getElementById("cancelModalClose");
+
+let cancelModalBusy = false;
+
+function openCancelModal({ title = "キャンセル確認", message, meta, onYes }) {
+  if (!cancelModal || !modalOverlay) {
+    // 念のためのフォールバック（URL出るけど最悪）
+    const ok = window.confirm(message || "本当にキャンセルしますか？");
+    if (ok) onYes?.();
+    return;
+  }
+
+  // 文言差し替え
+  const titleEl = document.getElementById("cancelModalTitle");
+  if (titleEl) titleEl.textContent = title;
+
+  if (cancelModalText)
+    cancelModalText.textContent = message || "本当にキャンセルしますか？";
+  if (cancelModalMeta) cancelModalMeta.textContent = meta || "";
+
+  // 開く
+  modalOverlay.classList.remove("hidden");
+  cancelModal.classList.remove("hidden");
+  modalOverlay.setAttribute("aria-hidden", "false");
+
+  // ボタン状態
+  cancelModalBusy = false;
+  if (cancelModalYes) {
+    cancelModalYes.disabled = false;
+    cancelModalYes.textContent = "キャンセルする";
+  }
+
+  // 閉じる処理
+  const close = () => {
+    if (cancelModalBusy) return; // 通信中は閉じさせない方針
+    modalOverlay.classList.add("hidden");
+    cancelModal.classList.add("hidden");
+    modalOverlay.setAttribute("aria-hidden", "true");
+
+    // イベント掃除
+    cleanup();
+  };
+
+  const yes = async () => {
+    if (cancelModalBusy) return;
+    cancelModalBusy = true;
+
+    if (cancelModalYes) {
+      cancelModalYes.disabled = true;
+      cancelModalYes.textContent = "処理中...";
+    }
+    if (cancelModalNo) cancelModalNo.disabled = true;
+    if (cancelModalClose) cancelModalClose.disabled = true;
+
+    try {
+      await onYes?.();
+      // 成功したら閉じる
+      modalOverlay.classList.add("hidden");
+      cancelModal.classList.add("hidden");
+      modalOverlay.setAttribute("aria-hidden", "true");
+    } finally {
+      cleanup();
+      if (cancelModalNo) cancelModalNo.disabled = false;
+      if (cancelModalClose) cancelModalClose.disabled = false;
+    }
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") close();
+  };
+
+  const cleanup = () => {
+    modalOverlay.removeEventListener("click", close);
+    cancelModalNo?.removeEventListener("click", close);
+    cancelModalClose?.removeEventListener("click", close);
+    cancelModalYes?.removeEventListener("click", yes);
+    document.removeEventListener("keydown", onKeyDown);
+  };
+
+  // イベント登録
+  modalOverlay.addEventListener("click", close);
+  cancelModalNo?.addEventListener("click", close);
+  cancelModalClose?.addEventListener("click", close);
+  cancelModalYes?.addEventListener("click", yes);
+  document.addEventListener("keydown", onKeyDown);
+
+  // フォーカス
+  cancelModalYes?.focus?.();
+}
+
 // ====== available days cache ======
 let availableDaysSetCache = null;
 
@@ -778,31 +875,38 @@ function renderReservationList(items) {
       if (!targetRid) return;
 
       if (action === "cancel") {
-        const ok = confirm(
-          `本当にキャンセルしますか？\n\n${ymdLabel} / ${time}\n予約ID: ${targetRid}`
-        );
-        if (!ok) return;
+        const ymdLabel2 = ymdLabel; // そのまま使う
+        const time2 = time;
+        const targetRid2 = targetRid;
 
-        try {
-          setListStatus("キャンセル中...");
+        openCancelModal({
+          message: "本当にキャンセルしますか？",
+          meta: `${ymdLabel2} / ${time2}\n予約ID: ${targetRid2}`,
+          onYes: async () => {
+            try {
+              setListStatus("キャンセル中...");
 
-          const { data } = await postJson(GAS_URL, {
-            action: "cancelReservation",
-            userId: profile.userId,
-            reservationId: targetRid,
-          });
+              const { data } = await postJson(GAS_URL, {
+                action: "cancelReservation",
+                userId: profile.userId,
+                reservationId: targetRid2,
+              });
 
-          if (!data?.ok)
-            throw new Error(data?.message || "キャンセルに失敗しました");
+              if (!data?.ok)
+                throw new Error(data?.message || "キャンセルに失敗しました");
 
-          const items2 = await fetchMyReservations();
-          renderReservationList(items2);
-          setListStatus(items2.length ? `${items2.length}件` : "");
-          log("キャンセルしたよ");
-        } catch (err) {
-          setListStatus("キャンセルできませんでした");
-          log(`ERROR: ${err?.message || err}`);
-        }
+              const items2 = await fetchMyReservations();
+              renderReservationList(items2);
+              setListStatus(items2.length ? `${items2.length}件` : "");
+              log("キャンセルしたよ");
+            } catch (err) {
+              setListStatus("キャンセルできませんでした");
+              log(`ERROR: ${err?.message || err}`);
+            }
+          },
+        });
+
+        return;
       }
 
       if (action === "rebook") {
